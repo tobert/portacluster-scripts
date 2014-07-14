@@ -1,0 +1,5 @@
+#!/bin/bash
+
+echo "empty for now"
+
+exit 0
