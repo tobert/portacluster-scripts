@@ -1,0 +1,194 @@
+#!/bin/bash
+#
+# Copyright 2014 Albert P. Tobey <atobey@datastax.com> @AlTobey
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# This script installs Arch Linux (20140713)
+# on the local system using a pre-rolled tarball image from node0
+#
+# Usage: bash arch-installer.sh
+#
+
+# a basic Arch linux image, should contain no configuration but
+# is expected to have openssh and systemd-networkd installed
+IMAGE="http://192.168.10.10/installer/arch-x64-20140713.tar.gz"
+
+# this file is not checked in - it contains the keys that should
+# be installed in /root/.ssh/authorized_keys for emergency access
+ROOT_KEYS="http://192.168.10.10/installer/authorized_keys"
+
+# this script is also not checked in since it usually contains ssh keys
+USER_SETUP="http://192.168.10.10/installer/users.sh"
+
+# all portacluster nodes have one SSD and it is always /dev/sda
+device=/dev/sda
+
+# print everything
+set -x
+
+export PATH=/bin:/sbin:/usr/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin
+
+die () { echo "FATAL: $*"; exit 1; }
+
+# make sure the drive is there
+dd if=$device of=/tmp/a.bak bs=1M count=1 || die "Could not read from block device $device"
+
+disk_sectors=$(blockdev --getsize $device) # disk size in sectors
+ss=$(blockdev --getss $device)             # don't assume sector size
+mbs=$((1048576/ss))                        # 1mb in sectors
+gbs=$((2**30/ss))                          # 1gb in sectors
+boot_start=$mbs                            # start at 1mb
+boot_end=$((gbs/2))                        # /boot 512MB
+skip=$((boot_end % mbs))                   # root alignment offset
+root_start=$((boot_end + (mbs - skip)))    # align on 1mb boundary
+root_end=$((root_start + gbs*40))          # root 40GB
+skip=$((root_end % mbs))                   # /srv alignment offset
+data_start=$((root_end + (mbs - skip)))    # align on 1mb boundary
+data_end=$((disk_sectors-mbs))             # /srv remainder of disk - 1mb
+sgdisk -Z $device                          # remove any existing GPT labels
+dd if=/dev/zero of=$device bs=1M count=2   # wipe the start of the drive
+sgdisk -og $device                         # create a new GPT label
+
+# create partitions
+sgdisk -n 1:$boot_start:$boot_end -c 1:boot -t 1:ef02 $device || die "Failed to create partition 1 on $device."
+sgdisk -n 2:$root_start:$root_end -c 2:root -t 2:0700 $device || die "Failed to create partition 2 on $device."
+sgdisk -n 3:$data_start:$data_end -c 3:data -t 3:0700 $device || die "Failed to create partition 3 on $device."
+
+echo ",,,*" |sfdisk --force $device -N1 # set BIOS bootable flag in the MBR
+sleep 1                                 # let the kernel finish scanning if necessary
+
+# zero the first 20MB of /boot and /, but NOT /srv since we might want that to survive
+dd if=/dev/zero of=/dev/sda1 bs=1M count=20
+dd if=/dev/zero of=/dev/sda2 bs=1M count=20
+
+# /boot is also the EFI partition and must be FAT
+mkfs.vfat -n boot -F 16 /dev/sda1 || die "mkfs failed on /dev/sda1"
+# root filesystem is btrfs
+mkfs.btrfs -L root /dev/sda2      || die "mkfs failed on /dev/sda2"
+# /srv filesystem is XFS (for now)
+mkfs.xfs -L data /dev/sda3 # let this fail if an FS is there
+
+NEWFS=/new
+mkdir -p $NEWFS
+mount /dev/sda2 $NEWFS
+mkdir $NEWFS/boot $NEWFS/srv
+mount /dev/sda1 $NEWFS/boot
+mount /dev/sda3 $NEWFS/srv
+
+curl $IMAGE |tar -C $NEWFS -xzf - || die "could not fetch/unpack image on $NEWFS!"
+
+# get PARTUUID values for partitions to use in fstab
+boot=$(blkid -s PARTUUID /dev/sda1 |sed -r -e 's/.*="//' -e 's/".*$//')
+root=$(blkid -s PARTUUID /dev/sda2 |sed -r -e 's/.*="//' -e 's/".*$//')
+data=$(blkid -s PARTUUID /dev/sda3 |sed -r -e 's/.*="//' -e 's/".*$//')
+
+cat > $NEWFS/etc/fstab <<EOF
+PARTUUID=$boot /boot vfat defaults 0 0
+PARTUUID=$root / btrfs defaults 0 0
+PARTUUID=$data /srv xfs defaults 0 0
+EOF
+
+iface=$(ip route show |awk '/^default/{print $5}' |head -n 1)
+mac=$(< /sys/class/net/$iface/address)
+address=$(ip addr show $iface |awk '/inet /{print $2}')
+ip4=$(echo $address |sed 's/\/[0-9]*//')
+gateway=$(ip route show |awk '/^default via/{print $3}' |head -n 1)
+hostfqdn=$(nslookup $ip4 |awk '/name = /{print $4}')
+hostshort=$(echo $hostfqdn |sed 's/\..*$//')
+hostdom=$(echo $hostfqdn |sed "s/$hostshort\.//")
+echo $hostfqdn > $NEWFS/etc/hostname
+
+cat > $NEWFS/etc/hosts <<EOF
+# created by portacluster-scripts/overlay/admin/srv/public/installer/autorun
+127.0.0.1       localhost
+$ip4 $hostfqdn $hostshort
+
+::1     localhost ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+EOF
+
+cat > $NEWFS/resolv.conf <<EOF
+# created by portacluster-scripts/overlay/admin/srv/public/installer/autorun
+search $hostdom
+nameserver 192.168.10.10
+EOF
+
+# the interface name might change on first boot; match by MAC
+cat > $NEWFS/etc/systemd/network/10-static.network <<EOF
+# created by portacluster-scripts/overlay/admin/srv/public/installer/autorun
+[Match]
+MACAddress=$mac
+
+[Network]
+Address=$address
+Gateway=$gateway
+EOF
+
+# install some ssh keys for root access
+rm -f $NEWFS/etc/ssh/*key*
+mkdir -p $NEWFS/root/.ssh
+curl $ROOT_KEYS > /root/.ssh/new_authorized_keys
+if [ $? -eq 0 ] ; then
+  mv /root/.ssh/new_authorized_keys /root/.ssh/authorized_keys
+  chmod 600 $NEWFS/root/.ssh/authorized_keys
+else
+  echo "Root SSH keys not found! System may be unaccessible after reboot!"
+fi
+
+mount -o bind /proc $NEWFS/proc || die "bind mount /proc"
+mount -o bind /sys  $NEWFS/sys  || die "bind mount /sys"
+mount -o bind /dev  $NEWFS/dev  || die "bind mount /dev"
+
+# for now, do not install a boot sector and instead get boot config from PXE
+#chroot $NEWFS grub-mkconfig > /boot/grub/grub.cfg
+#chroot $NEWFS grub-install $device
+
+# these must be enabled for the system to be useful, everything else
+# can be set up after first boot
+chroot $NEWFS systemctl enable systemd-networkd.service
+chroot $NEWFS systemctl enable sshd.service
+
+# finally set up any users if there is a users.sh script on node0
+curl $USER_SETUP > /tmp/users.sh
+if [ $? -eq 0 ] ; then
+	mv /tmp/users.sh $NEWFS/users.sh
+	chroot $NEWFS /bin/bash /users.sh
+	rm -f $NEWFS/users.sh
+fi
+
+umount $NEWFS/dev
+umount $NEWFS/sys
+umount $NEWFS/proc
+umount $NEWFS/boot
+umount $NEWFS/srv
+umount $NEWFS
+
+sync
+
+sleep 10
+
+# let node0 know the install is complete
+wget http://192.168.10.10/done?mac=$(echo $mac |sed 's/://g')\&hostname=$hostfqdn
+
+sleep 10
+
+reboot
+
+# vim: ft=sh ts=2 sw=2 noet tw=120 softtabstop=2

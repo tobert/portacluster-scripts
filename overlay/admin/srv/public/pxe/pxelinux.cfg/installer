@@ -1,0 +1,11 @@
+# managed by portacluster-scripts @ overlay/admin/srv/public/pxe/pxelinux.cfg/installer
+# will fetch autorun scripts from node0:/srv/public/installer
+
+PROMPT 0
+TIMEOUT 10
+DEFAULT installer
+
+LABEL installer
+	LINUX /sysrcd-kernel
+	INITRD /sysrcd-initram.igz
+	APPEND docache dodhcp setkmap=us netboot=http://192.168.10.10/sysrcd/sysrcd.dat ar_source=http://192.168.10.10/installer ar_nowait

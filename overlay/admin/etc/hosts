@@ -1,0 +1,16 @@
+# managed by portacluster-scripts @ overlay/admin/etc/hosts
+
+127.0.0.1 localhost.localdomain localhost
+::1 localhost.localdomain localhost
+
+192.168.10.1 switch.pc.datastax.com switch
+192.168.10.3 pdu.pc.datastax.com pdu
+192.168.10.4 zorak.pc.datastax.com zorak
+192.168.10.5 mbp.pc.datastax.com mbp
+192.168.10.10 node0.pc.datastax.com node0
+192.168.10.11 node1.pc.datastax.com node1
+192.168.10.12 node2.pc.datastax.com node2
+192.168.10.13 node3.pc.datastax.com node3
+192.168.10.14 node4.pc.datastax.com node4
+192.168.10.15 node5.pc.datastax.com node5
+192.168.10.16 node6.pc.datastax.com node6

@@ -1,0 +1,18 @@
+# managed by portacluster-scripts @ overlay/admin/srv/public/pxe/pxelinux.cfg/arch-linux
+
+PROMPT 0
+TIMEOUT 10
+DEFAULT arch
+
+# default to booting the locally-installed Arch image with a remote kernel
+# note: these kernels must match what is in /lib/modules on the worker machines
+LABEL arch
+	LINUX /arch-kernel
+	INITRD /arch-initramfs
+	APPEND root=/dev/sda2 rw
+
+# provide an option to select system rescue cd
+LABEL rescue
+	LINUX /sysrcd-kernel
+	INITRD /sysrcd-initram.igz
+	APPEND docache dodhcp setkmap=us netboot=http://192.168.10.10/sysrcd/sysrcd.dat

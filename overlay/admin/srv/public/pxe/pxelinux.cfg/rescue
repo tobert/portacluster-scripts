@@ -1,0 +1,11 @@
+# managed by portacluster-scripts @ overlay/admin/srv/public/pxe/pxelinux.cfg/rescue
+# will fetch autorun scripts from node0:/srv/public/rescue
+
+PROMPT 0
+TIMEOUT 10
+DEFAULT rescue
+
+LABEL rescue
+	LINUX /sysrcd-kernel
+	INITRD /sysrcd-initram.igz
+	APPEND docache dodhcp setkmap=us netboot=http://192.168.10.10/sysrcd/sysrcd.dat ar_source=http://192.168.10.10/rescue ar_nowait
