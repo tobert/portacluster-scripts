@@ -130,15 +130,35 @@ search $hostdom
 nameserver 192.168.10.10
 EOF
 
+# set networking up with bridge br0 by default
+cat > $NEWFS/etc/systemd/network/br0.netdev <<EOF
+# created by portacluster-scripts/overlay/admin/srv/public/installer/autorun
+[NetDev]
+Name=br0
+Kind=bridge
+EOF
+
 # the interface name might change on first boot; match by MAC
-cat > $NEWFS/etc/systemd/network/10-static.network <<EOF
+cat > $NEWFS/etc/systemd/network/11-eth.network <<EOF
 # created by portacluster-scripts/overlay/admin/srv/public/installer/autorun
 [Match]
 MACAddress=$mac
+Name=en*
+
+[Network]
+Bridge=br0
+EOF
+
+# assign the node address to the bridge
+cat > $NEWFS/etc/systemd/network/12-br0.network <<EOF
+# created by portacluster-scripts/overlay/admin/srv/public/installer/autorun
+[Match]
+Name=br0
 
 [Network]
 Address=$address
 Gateway=$gateway
+DNS=192.168.10.10
 EOF
 
 # install some ssh keys for root access
