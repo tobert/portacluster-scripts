@@ -20,12 +20,9 @@
 source "$(dirname $0)/../bin/functions.sh"
 
 if this_is_worker ; then
-
-	mkdir -p /srv/cassandra
-
+	mkdir -p /srv/cassandra/{log,data,commitlogs,saved_caches}
 	(grep -q '^cassandra:' /etc/group)  || groupadd -g 1234 cassandra
-	(grep -q '^cassandra:' /etc/passwd) || useradd -u 1234 -c "Apache Cassandra" -g cassandra -s /bin/bash -d /srv/cassandra
-
+	(grep -q '^cassandra:' /etc/passwd) || useradd -u 1234 -c "Apache Cassandra" -g cassandra -s /bin/bash -d /srv/cassandra cassandra
 	chown -R cassandra:cassandra /srv/cassandra
 fi
 
