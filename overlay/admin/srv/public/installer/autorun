@@ -20,8 +20,10 @@
 # This script installs Arch Linux (20140713)
 # on the local system using a pre-rolled tarball image from node0
 #
-# Usage: bash arch-installer.sh
+# It is expected to be run from System Rescue CD, usually via
+# SysRCD's autorun functionality.
 #
+# Source: portacluster-scripts/overlay/admin/srv/public/installer/autorun
 
 # a basic Arch linux image, should contain no configuration but
 # is expected to have openssh and systemd-networkd installed
