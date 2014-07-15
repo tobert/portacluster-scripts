@@ -19,7 +19,7 @@
 
 source "$(dirname $0)/../bin/functions.sh"
 
-installpkg sudo
+pkg_install sudo
 
 cat > /etc/sudoers << EOF
 # managed by portacluster-scripts @ scripts.d/01-sudo.sh
