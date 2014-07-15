@@ -19,11 +19,14 @@
 
 source "$(dirname $0)/../bin/functions.sh"
 
-mkdir -p /srv/cassandra
+if this_is_worker ; then
 
-(grep -q '^cassandra:' /etc/group)  || groupadd -g 1234 cassandra
-(grep -q '^cassandra:' /etc/passwd) || useradd -u 1234 -c "Apache Cassandra" -g cassandra -s /bin/bash -d /srv/cassandra
+	mkdir -p /srv/cassandra
 
-chown -R cassandra:cassandra /srv/cassandra
+	(grep -q '^cassandra:' /etc/group)  || groupadd -g 1234 cassandra
+	(grep -q '^cassandra:' /etc/passwd) || useradd -u 1234 -c "Apache Cassandra" -g cassandra -s /bin/bash -d /srv/cassandra
+
+	chown -R cassandra:cassandra /srv/cassandra
+fi
 
 # vim: ft=sh ts=2 sw=2 noet tw=120 softtabstop=2
